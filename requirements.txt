@@ -1,0 +1,58 @@
+# VisionSeal Complete - Core Dependencies (No Version Restrictions)
+
+# Core API Framework
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+
+# Security & Authentication
+python-jose
+passlib
+PyJWT
+python-multipart
+python-magic
+
+# Configuration & Environment
+python-dotenv
+
+# Database & Storage (Optional)
+sqlalchemy
+alembic
+psycopg2-binary
+redis
+
+# AI & Vector Storage (Optional)
+openai
+weaviate-client
+tiktoken
+
+# Document Processing (Optional)
+python-docx
+PyPDF2
+python-pptx
+openpyxl
+
+# Data Processing (Optional)
+pandas
+numpy
+
+# Web Scraping (Optional - for automation engines)
+playwright
+beautifulsoup4
+requests
+
+# Utilities
+python-dateutil
+pytz
+aiofiles
+
+# Development & Testing (Optional)
+pytest
+pytest-asyncio
+httpx
+
+# Code Quality (Optional)
+black
+isort
+flake8

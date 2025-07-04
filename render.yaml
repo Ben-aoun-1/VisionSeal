@@ -1,0 +1,21 @@
+# Render.com deployment configuration
+services:
+  - type: web
+    name: visionseal
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: |
+      pip install -r requirements-production.txt
+      playwright install chromium
+      playwright install-deps
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+    # Health check
+    healthCheckPath: /health

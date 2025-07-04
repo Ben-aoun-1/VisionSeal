@@ -1,0 +1,106 @@
+# VisionSeal Security - Critical Files to Exclude
+
+# Environment files with credentials
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# API Keys and secrets
+secrets/
+keys/
+credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files (may contain sensitive data)
+logs/
+*.log
+*.log.*
+
+# Temporary and cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Browser automation files
+screenshots/
+downloads/
+profiles/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Security scanning reports
+security-report.*
+vulnerability-scan.*
+
+# SSL certificates
+*.crt
+*.cert
+*.ca-bundle
+
+# Configuration files that might contain secrets
+config.local.*
+settings.local.*
+
+# Node modules (if any frontend dependencies)
+node_modules/
+
+# Python virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Testing artifacts
+.pytest_cache/
+.tox/
+
+# Package managers
+poetry.lock
+Pipfile.lock

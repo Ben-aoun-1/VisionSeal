@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionSeal Dashboard Test</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .record { background: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>VisionSeal Dashboard Test</h1>
+    
+    <div id="status">Testing connection...</div>
+    <div id="results"></div>
+
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://fycatruiawynbzuafdsx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5Y2F0cnVpYXd5bmJ6dWFmZHN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTk5MzI2NjksImV4cCI6MjAzNTUwODY2OX0.z8hfoI29aHdVB2wNrNhDLEhBSt7nFJ5wSlMLNWgOqPw';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        async function testDashboard() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Loading data from Supabase...</div>';
+                
+                // Test 1: Basic connection
+                const { data, error } = await supabase
+                    .from('tenders')
+                    .select('*')
+                    .order('extracted_at', { ascending: false })
+                    .limit(10);
+
+                if (error) {
+                    throw error;
+                }
+
+                statusDiv.innerHTML = '<div class="status success">✅ Connection successful!</div>';
+                
+                // Display results
+                const total = data.length;
+                const ungmCount = data.filter(o => o.source === 'UNGM').length;
+                const tunipagesCount = data.filter(o => o.source === 'TUNIPAGES').length;
+                const avgRelevance = total > 0 ? 
+                    (data.reduce((sum, o) => sum + (o.relevance_score || 0), 0) / total).toFixed(1) : 0;
+
+                resultsDiv.innerHTML = `
+                    <h2>Data Summary</h2>
+                    <div class="status info">
+                        <strong>Total Records:</strong> ${total}<br>
+                        <strong>UNGM:</strong> ${ungmCount}<br>
+                        <strong>TuniPages:</strong> ${tunipagesCount}<br>
+                        <strong>Average Relevance:</strong> ${avgRelevance}
+                    </div>
+                    
+                    <h3>Sample Records:</h3>
+                    ${data.slice(0, 5).map(record => `
+                        <div class="record">
+                            <strong>${record.title}</strong><br>
+                            <small>Source: ${record.source} | Country: ${record.country || 'N/A'} | Score: ${record.relevance_score || 0}</small>
+                        </div>
+                    `).join('')}
+                `;
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+                console.error('Dashboard test error:', error);
+            }
+        }
+
+        // Run test when page loads
+        document.addEventListener('DOMContentLoaded', testDashboard);
+    </script>
+</body>
+</html>

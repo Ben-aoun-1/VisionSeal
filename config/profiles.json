@@ -1,0 +1,11 @@
+{
+  "test_profile": {
+    "name": "Test Profile",
+    "description": "Profile for testing",
+    "settings": {
+      "max_pages": 2,
+      "headless": true,
+      "request_delay": 1
+    }
+  }
+}

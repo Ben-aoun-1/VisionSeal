@@ -1,0 +1,22 @@
+# VisionSeal Complete - Minimal Core Dependencies
+# These are the absolute minimum required to run the application
+
+# Core API Framework
+fastapi
+uvicorn
+
+# Data Validation
+pydantic
+pydantic-settings
+
+# Security
+python-jose
+passlib
+PyJWT
+
+# File Handling
+python-multipart
+python-magic
+
+# Configuration
+python-dotenv

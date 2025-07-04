@@ -1,0 +1,21 @@
+{
+  "scrapers": {
+    "ungm": {
+      "enabled": true,
+      "max_pages": 5,
+      "request_delay": 2,
+      "timeout": 30
+    },
+    "tunipages": {
+      "enabled": true,
+      "max_pages": 5,
+      "request_delay": 2,
+      "timeout": 30
+    }
+  },
+  "task_manager": {
+    "max_workers": 2,
+    "scheduler_interval": 30,
+    "max_retry_attempts": 3
+  }
+}
