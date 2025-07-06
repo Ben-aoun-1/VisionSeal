@@ -1,7 +1,0 @@
-#!/bin/bash
-# VisionSeal Configuration CLI Wrapper
-# Convenience script to run the configuration CLI from project root
-
-cd "$(dirname "$0")"
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
-python3 src/core/config/cli.py "$@"

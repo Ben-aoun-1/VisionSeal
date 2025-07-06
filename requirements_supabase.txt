@@ -1,3 +1,0 @@
-# Additional requirements for Supabase integration
-supabase==2.5.0
-postgrest-py==0.13.2

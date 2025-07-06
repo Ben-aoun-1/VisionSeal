@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for browser automation
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     chromium \
     chromium-driver \
+    libmagic1 \
+    libmagic-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Playwright and browsers

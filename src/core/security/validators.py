@@ -4,7 +4,11 @@ Fixes critical security vulnerabilities from original codebase
 """
 import re
 import os
-import magic
+try:
+    import magic
+    HAS_MAGIC = True
+except ImportError:
+    HAS_MAGIC = False
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, UploadFile
@@ -15,6 +19,20 @@ from core.config.settings import settings
 
 class FileValidator:
     """Secure file validation and sanitization"""
+    
+    @staticmethod
+    def _fallback_mime_detection(file_ext: str) -> str:
+        """Fallback MIME type detection when python-magic is not available"""
+        mime_map = {
+            '.pdf': 'application/pdf',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            '.txt': 'text/plain',
+            '.json': 'application/json',
+            '.csv': 'text/csv'
+        }
+        return mime_map.get(file_ext, 'application/octet-stream')
     
     ALLOWED_MIME_TYPES = {
         '.pdf': ['application/pdf'],
@@ -93,7 +111,11 @@ class FileValidator:
             file_header = file.file.read(2048)
             file.file.seek(0)
             
-            mime_type = magic.from_buffer(file_header, mime=True)
+            if HAS_MAGIC:
+                mime_type = magic.from_buffer(file_header, mime=True)
+            else:
+                # Fallback MIME detection without magic library
+                mime_type = cls._fallback_mime_detection(file_ext)
             
             allowed_mimes = cls.ALLOWED_MIME_TYPES.get(file_ext, [])
             if mime_type not in allowed_mimes:
