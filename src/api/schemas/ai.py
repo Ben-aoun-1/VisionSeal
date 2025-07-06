@@ -39,7 +39,7 @@ class ChatRequest(BaseModel):
         return v.strip()
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "question": "What are the main requirements for this tender?",
                 "document_path": "/uploads/tender_document.pdf",
@@ -57,7 +57,7 @@ class DocumentAnalysisRequest(BaseModel):
     generate_response: bool = False
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "operation": "document_analysis",
                 "extract_summary": True,
@@ -75,7 +75,7 @@ class SectorAnalysis(BaseModel):
     keywords: List[str] = Field(default_factory=list)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "sector": "Information Technology",
                 "confidence": 0.85,
@@ -91,7 +91,7 @@ class CountryAnalysis(BaseModel):
     region: Optional[str] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "country": "Tunisia",
                 "confidence": 0.92,
@@ -115,7 +115,7 @@ class DocumentAnalysisResult(BaseModel):
     model_used: Optional[str] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "summary": "This is a tender for IT consulting services...",
                 "sector_analysis": {
@@ -145,7 +145,7 @@ class ResponseGenerationResult(BaseModel):
     token_usage: Optional[Dict[str, int]] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "response_file": {
                     "name": "response_topaza_20240115_1200_tender.docx",
@@ -174,7 +174,7 @@ class ChatResponse(BaseModel):
     model_used: Optional[str] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "answer": "Based on the document, the main requirements include...",
                 "confidence": 0.88,
@@ -193,7 +193,7 @@ class AIStatusResponse(BaseResponse):
     estimated_time_remaining: Optional[float] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "processing",
                 "operation": "response_generation",
@@ -210,7 +210,7 @@ class GeneratedFilesResponse(BaseResponse):
     total_files: int = 0
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "success",
                 "files": [],

@@ -4,7 +4,11 @@ Provides dynamic configuration management, validation, and hot-reload capabiliti
 """
 import os
 import json
-import yaml
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 from datetime import datetime

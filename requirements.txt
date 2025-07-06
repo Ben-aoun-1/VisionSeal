@@ -15,6 +15,7 @@ python-magic
 
 # Configuration & Environment
 python-dotenv
+PyYAML
 
 # Database & Storage (Optional)
 sqlalchemy

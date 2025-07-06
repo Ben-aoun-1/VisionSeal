@@ -130,7 +130,7 @@ class HealthCheck(BaseModel):
     services: Dict[str, str] = Field(default_factory=dict)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "healthy",
                 "timestamp": "2024-01-01T12:00:00Z",

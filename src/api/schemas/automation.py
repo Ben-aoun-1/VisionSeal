@@ -43,7 +43,7 @@ class AutomationStartRequest(BaseModel):
     search_terms: Optional[List[str]] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "source": "ungm",
                 "max_pages": 10,
@@ -69,7 +69,7 @@ class DeepDiveRequest(BaseModel):
         return v.strip()
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "item_id": "tender_12345",
                 "source": "ungm",
@@ -104,7 +104,7 @@ class TenderInfo(BaseModel):
     relevance_score: Optional[float] = Field(None, ge=0, le=1)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "ungm_12345",
                 "title": "Technical Assistance for Digital Transformation",
@@ -145,7 +145,7 @@ class AutomationStatusResponse(BaseResponse):
     enhanced: bool = False
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "processing",
                 "session_id": "session_12345",
@@ -167,7 +167,7 @@ class ExtractionResults(BaseResponse):
     source: Optional[AutomationSource] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "success",
                 "data": [],
