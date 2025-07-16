@@ -111,3 +111,5 @@ src/data/
 uploads/
 *.bin
 *.chroma
+**/chroma_db/
+chroma_db/
