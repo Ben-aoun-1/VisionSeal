@@ -76,6 +76,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         return 'Dashboard'
       case '/tenders':
         return 'Tenders'
+      case '/saved-tenders':
+        return 'Saved Tenders'
       case '/analytics':
         return 'Analytics'
       case '/settings':

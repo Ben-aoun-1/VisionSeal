@@ -54,14 +54,17 @@ import {
   Star as StarIcon,
   ExpandMore as ExpandMoreIcon,
   Close as CloseIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Bookmark as BookmarkIcon,
+  BookmarkBorder as BookmarkBorderIcon
 } from '@mui/icons-material'
 import { Helmet } from 'react-helmet-async'
 import { useQuery } from 'react-query'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, isValid } from 'date-fns'
-import { tenderApi } from '@/utils/api'
+import { tenderApi, savedTendersApi } from '@/utils/api'
 import { Tender, TenderFilters, TenderSource, TenderStatus } from '@/types/tender'
+import { useAuth } from '@/hooks/useAuth'
 
 const Tenders: React.FC = () => {
   const theme = useTheme()
@@ -79,6 +82,8 @@ const Tenders: React.FC = () => {
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null)
   const [exportLoading, setExportLoading] = useState(false)
   const [selectedTenders, setSelectedTenders] = useState<string[]>([])
+  const [savedTenders, setSavedTenders] = useState<Set<string>>(new Set())
+  const [savingTender, setSavingTender] = useState<string | null>(null)
 
   // Build query filters
   const queryFilters = useMemo(() => ({
@@ -222,6 +227,60 @@ const Tenders: React.FC = () => {
     navigate(`/tenders/${tenderId}`)
   }
 
+  const handleSaveTender = async (tenderId: string) => {
+    if (savingTender) return // Prevent multiple saves
+    
+    setSavingTender(tenderId)
+    try {
+      if (savedTenders.has(tenderId)) {
+        // Unsave tender
+        await savedTendersApi.unsaveTender(tenderId)
+        setSavedTenders(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(tenderId)
+          return newSet
+        })
+      } else {
+        // Save tender
+        await savedTendersApi.saveTender(tenderId)
+        setSavedTenders(prev => new Set(prev).add(tenderId))
+      }
+    } catch (error) {
+      console.error('Failed to save/unsave tender:', error)
+    } finally {
+      setSavingTender(null)
+    }
+  }
+
+  // Load saved tenders status for current page
+  const loadSavedTendersStatus = async () => {
+    if (!tendersData?.tenders) return
+    
+    try {
+      const savedChecks = await Promise.all(
+        tendersData.tenders.map(tender => 
+          savedTendersApi.checkTenderSaved(tender.id)
+        )
+      )
+      
+      const savedSet = new Set<string>()
+      savedChecks.forEach((check, index) => {
+        if (check.is_saved) {
+          savedSet.add(tendersData.tenders[index].id)
+        }
+      })
+      
+      setSavedTenders(savedSet)
+    } catch (error) {
+      console.error('Failed to load saved tenders status:', error)
+    }
+  }
+
+  // Load saved status when tenders data changes
+  useEffect(() => {
+    loadSavedTendersStatus()
+  }, [tendersData?.tenders])
+
   const activeFiltersCount = Object.values(filters).filter(v => 
     v !== undefined && v !== null && v !== '' && 
     (Array.isArray(v) ? v.length > 0 : true)
@@ -319,10 +378,20 @@ const Tenders: React.FC = () => {
                   )}
                   {Object.entries(filters).map(([key, value]) => {
                     if (!value || (Array.isArray(value) && value.length === 0)) return null
+                    
+                    // Format date range filters
+                    let label = `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
+                    if (key === 'deadline_from') label = `Deadline from: ${formatDate(value as string)}`
+                    if (key === 'deadline_to') label = `Deadline to: ${formatDate(value as string)}`
+                    if (key === 'publication_from') label = `Published from: ${formatDate(value as string)}`
+                    if (key === 'publication_to') label = `Published to: ${formatDate(value as string)}`
+                    if (key === 'min_relevance') label = `Min relevance: ${value}`
+                    if (key === 'max_relevance') label = `Max relevance: ${value}`
+                    
                     return (
                       <Chip
                         key={key}
-                        label={`${key}: ${Array.isArray(value) ? value.join(', ') : value}`}
+                        label={label}
                         onDelete={() => handleFilterChange(key as keyof TenderFilters, undefined)}
                         size="small"
                       />
@@ -474,6 +543,25 @@ const Tenders: React.FC = () => {
                       
                       <TableCell align="center">
                         <Stack direction="row" spacing={1} justifyContent="center">
+                          <Tooltip title={savedTenders.has(tender.id) ? "Remove from saved" : "Save tender"}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSaveTender(tender.id)
+                              }}
+                              disabled={savingTender === tender.id}
+                              color={savedTenders.has(tender.id) ? "primary" : "default"}
+                            >
+                              {savingTender === tender.id ? (
+                                <CircularProgress size={16} />
+                              ) : savedTenders.has(tender.id) ? (
+                                <BookmarkIcon />
+                              ) : (
+                                <BookmarkBorderIcon />
+                              )}
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="View details">
                             <IconButton
                               size="small"
@@ -609,8 +697,8 @@ const Tenders: React.FC = () => {
               <InputLabel>Countries</InputLabel>
               <Select
                 multiple
-                value={filters.countries || []}
-                onChange={(e) => handleFilterChange('countries', e.target.value)}
+                value={filters.country || []}
+                onChange={(e) => handleFilterChange('country', e.target.value)}
                 renderValue={(selected) => (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {(selected as string[]).map((value) => (
@@ -630,20 +718,76 @@ const Tenders: React.FC = () => {
             {/* Relevance Score Filter */}
             <Box>
               <Typography gutterBottom>
-                Relevance Score: {filters.min_relevance_score || 0} - {filters.max_relevance_score || 100}
+                Relevance Score: {filters.min_relevance || 0} - {filters.max_relevance || 100}
               </Typography>
               <Slider
-                value={[filters.min_relevance_score || 0, filters.max_relevance_score || 100]}
+                value={[filters.min_relevance || 0, filters.max_relevance || 100]}
                 onChange={(_, value) => {
                   const [min, max] = value as number[]
-                  handleFilterChange('min_relevance_score', min)
-                  handleFilterChange('max_relevance_score', max)
+                  handleFilterChange('min_relevance', min)
+                  handleFilterChange('max_relevance', max)
                 }}
                 valueLabelDisplay="auto"
                 min={0}
                 max={100}
               />
             </Box>
+
+            {/* Date Range Filters */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>Date Filters</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Stack spacing={2}>
+                  {/* Deadline Date Range */}
+                  <Typography variant="subtitle2" gutterBottom>
+                    Deadline Range
+                  </Typography>
+                  <Stack direction="row" spacing={2}>
+                    <TextField
+                      label="From"
+                      type="date"
+                      value={filters.deadline_from || ''}
+                      onChange={(e) => handleFilterChange('deadline_from', e.target.value || undefined)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="To"
+                      type="date"
+                      value={filters.deadline_to || ''}
+                      onChange={(e) => handleFilterChange('deadline_to', e.target.value || undefined)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                  </Stack>
+                  
+                  {/* Publication Date Range */}
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
+                    Publication Range
+                  </Typography>
+                  <Stack direction="row" spacing={2}>
+                    <TextField
+                      label="From"
+                      type="date"
+                      value={filters.publication_from || ''}
+                      onChange={(e) => handleFilterChange('publication_from', e.target.value || undefined)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="To"
+                      type="date"
+                      value={filters.publication_to || ''}
+                      onChange={(e) => handleFilterChange('publication_to', e.target.value || undefined)}
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                  </Stack>
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
 
             {/* Clear Filters */}
             <Button

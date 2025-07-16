@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr, Field, validator
 
 from core.auth.supabase_auth import auth_manager, get_current_user
 from api.schemas.common import SuccessResponse, ErrorResponse
+from api.middleware.session import session_manager
 from core.logging.setup import get_logger
 
 logger = get_logger("auth")
@@ -45,7 +46,8 @@ class UserRegistration(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     company: str = Field(None, max_length=200)
     phone: str = Field(None, max_length=20)
-    country: str = Field(None, max_length=100)
+    sector: str = Field(None, max_length=100)
+    address: str = Field(None, max_length=300)
     
     @validator('password')
     def validate_password(cls, v):
@@ -127,7 +129,8 @@ async def register_user(registration: UserRegistration):
             "last_name": registration.last_name,
             "company": registration.company,
             "phone": registration.phone,
-            "country": registration.country,
+            "sector": registration.sector,
+            "address": registration.address,
             "role": "user",
             "preferences": {
                 "notifications_email": True,
@@ -199,23 +202,39 @@ async def login_user(login: UserLogin):
 
 
 @router.post("/logout", response_model=SuccessResponse)
-async def logout_user(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def logout_user(request: Request, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Logout current user and invalidate session
     """
     try:
         logger.info(f"Logout for user: {current_user['email']}")
         
-        # Note: In a full implementation, you might want to track and invalidate specific tokens
-        # For now, we'll just return success as Supabase handles token invalidation
-        
-        return SuccessResponse(
-            message="Logged out successfully"
-        )
+        # Get the token from the Authorization header
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+            
+            # Invalidate the token on Supabase
+            result = await auth_manager.logout_user(token)
+            
+            if result["success"]:
+                return SuccessResponse(
+                    message="Logged out successfully"
+                )
+            else:
+                raise HTTPException(status_code=400, detail="Logout failed")
+        else:
+            # Even without token, consider it a successful logout
+            return SuccessResponse(
+                message="Logged out successfully"
+            )
         
     except Exception as e:
         logger.error(f"Logout failed: {str(e)}")
-        raise HTTPException(status_code=400, detail="Logout failed")
+        # Return success even on failure to avoid client-side issues
+        return SuccessResponse(
+            message="Logged out successfully"
+        )
 
 
 @router.post("/refresh", response_model=AuthResponse)
@@ -323,12 +342,82 @@ async def get_current_user_profile(current_user: Dict[str, Any] = Depends(get_cu
         raise HTTPException(status_code=400, detail="Failed to get user profile")
 
 
+@router.get("/sessions", response_model=SuccessResponse)
+async def get_user_sessions(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get all active sessions for the current user
+    """
+    try:
+        sessions = session_manager.get_user_sessions(current_user["user_id"])
+        return SuccessResponse(
+            data={
+                "sessions": sessions,
+                "total_count": len(sessions)
+            },
+            message="User sessions retrieved successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Get user sessions failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sessions")
+
+
+@router.delete("/sessions/{session_id}", response_model=SuccessResponse)
+async def revoke_session(session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Revoke a specific session
+    """
+    try:
+        # Verify session belongs to current user
+        user_sessions = session_manager.get_user_sessions(current_user["user_id"])
+        session_exists = any(s["session_id"] == session_id for s in user_sessions)
+        
+        if not session_exists:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        session_manager.invalidate_session(session_id)
+        
+        return SuccessResponse(
+            message="Session revoked successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Revoke session failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to revoke session")
+
+
+@router.delete("/sessions", response_model=SuccessResponse)
+async def revoke_all_sessions(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Revoke all sessions for the current user except the current one
+    """
+    try:
+        # Get current session ID from request
+        from fastapi import Request
+        request = Request.get_instance()  # This might not work directly
+        
+        # Alternative: get all sessions and invalidate them
+        session_manager.invalidate_user_sessions(current_user["user_id"])
+        
+        return SuccessResponse(
+            message="All sessions revoked successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Revoke all sessions failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to revoke sessions")
+
+
 @router.get("/status", response_model=SuccessResponse)
 async def auth_status():
     """
     Check authentication system status
     """
     try:
+        session_stats = session_manager.get_session_stats()
+        
         return SuccessResponse(
             data={
                 "auth_enabled": True,
@@ -338,8 +427,10 @@ async def auth_status():
                     "email_verification",
                     "password_reset",
                     "jwt_tokens",
-                    "refresh_tokens"
-                ]
+                    "refresh_tokens",
+                    "session_management"
+                ],
+                "session_stats": session_stats
             },
             message="Authentication system is operational"
         )

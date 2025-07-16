@@ -13,6 +13,7 @@ import {
 import {
   Dashboard as DashboardIcon,
   Description as TendersIcon,
+  Bookmark as SavedTendersIcon,
   Analytics as AnalyticsIcon,
   AutoAwesome as AIIcon,
   Settings as SettingsIcon,
@@ -105,6 +106,11 @@ const navigationItems = [
     icon: <TendersIcon />,
     path: '/tenders',
     badge: '1.2k',
+  },
+  {
+    text: 'Saved Tenders',
+    icon: <SavedTendersIcon />,
+    path: '/saved-tenders',
   },
   {
     text: 'Analytics',

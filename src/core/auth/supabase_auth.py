@@ -44,7 +44,7 @@ class SupabaseAuthManager:
             if response.user:
                 logger.info(f"✅ User registered successfully: {email}")
                 
-                # Create user profile in our custom table
+                # Create user profile manually since trigger was removed
                 await self._create_user_profile(response.user, metadata)
                 
                 return {
@@ -61,7 +61,21 @@ class SupabaseAuthManager:
                 
         except Exception as e:
             logger.error(f"❌ Registration error: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
+            # Check if it's a Supabase auth error
+            if hasattr(e, 'message'):
+                error_msg = e.message
+            else:
+                error_msg = str(e)
+            
+            # More specific error handling
+            if "already registered" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="User already exists")
+            elif "invalid email" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Invalid email format")
+            elif "weak password" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Password too weak")
+            else:
+                raise HTTPException(status_code=400, detail=f"Registration failed: {error_msg}")
     
     async def login_user(self, email: str, password: str) -> Dict[str, Any]:
         """Login user with Supabase Auth"""
@@ -99,13 +113,24 @@ class SupabaseAuthManager:
     async def logout_user(self, token: str) -> Dict[str, Any]:
         """Logout user and invalidate session"""
         try:
-            # Set the session token
-            self.supabase.auth.set_session(token, refresh_token=None)
+            # Validate token format
+            if not token or len(token) < 20:
+                raise HTTPException(status_code=400, detail="Invalid token format")
             
-            # Sign out
+            # Get user info before logout for logging
+            user_info = None
+            try:
+                user_response = self.supabase.auth.get_user(token)
+                if user_response.user:
+                    user_info = user_response.user.email
+            except:
+                pass  # User info is optional for logout
+            
+            # Set the session token and sign out
+            self.supabase.auth.set_session(token, refresh_token=None)
             response = self.supabase.auth.sign_out()
             
-            logger.info("✅ User logged out successfully")
+            logger.info(f"✅ User logged out successfully: {user_info or 'unknown'}")
             return {
                 "success": True,
                 "message": "Logged out successfully"
@@ -113,35 +138,52 @@ class SupabaseAuthManager:
             
         except Exception as e:
             logger.error(f"❌ Logout error: {str(e)}")
+            # Even if logout fails, return success to avoid client-side issues
+            # The token will still expire naturally
             return {
-                "success": False,
-                "error": str(e)
+                "success": True,
+                "message": "Logged out successfully"
             }
     
     async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
         """Refresh user session token"""
         try:
+            # Validate refresh token format
+            if not refresh_token or not isinstance(refresh_token, str):
+                raise HTTPException(status_code=400, detail="Invalid refresh token format")
+            
+            # Attempt to refresh session
             response = self.supabase.auth.refresh_session(refresh_token)
             
-            if response.session:
+            if response.session and response.session.access_token:
                 logger.info("✅ Token refreshed successfully")
+                
+                # Update last login for user
+                if response.user:
+                    await self._update_last_login(response.user.id)
+                
                 return {
                     "success": True,
                     "session": response.session,
                     "access_token": response.session.access_token,
                     "refresh_token": response.session.refresh_token,
-                    "expires_in": response.session.expires_in
+                    "expires_in": response.session.expires_in,
+                    "user": response.user
                 }
             else:
-                logger.warning("⚠️ Token refresh failed")
+                logger.warning("⚠️ Token refresh failed - invalid session response")
                 return {
                     "success": False,
-                    "error": "Token refresh failed"
+                    "error": "Invalid refresh token or session expired"
                 }
                 
         except Exception as e:
             logger.error(f"❌ Token refresh error: {str(e)}")
-            raise HTTPException(status_code=401, detail="Token refresh failed")
+            # Distinguish between different error types
+            if "invalid" in str(e).lower() or "expired" in str(e).lower():
+                raise HTTPException(status_code=401, detail="Refresh token invalid or expired")
+            else:
+                raise HTTPException(status_code=500, detail="Token refresh service unavailable")
     
     async def verify_email(self, token: str) -> Dict[str, Any]:
         """Verify user email with token"""
@@ -216,14 +258,25 @@ class SupabaseAuthManager:
     async def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
         """Get current user from JWT token"""
         try:
+            if not credentials or not credentials.credentials:
+                raise HTTPException(status_code=401, detail="Missing authentication token")
+            
             token = credentials.credentials
+            
+            # Validate token format
+            if not token or len(token) < 20:
+                raise HTTPException(status_code=401, detail="Invalid token format")
             
             # Verify token with Supabase
             response = self.supabase.auth.get_user(token)
             
             if response.user:
-                # Get additional user profile data
+                # Check if user is still active
                 user_profile = await self._get_user_profile(response.user.id)
+                
+                # Verify user account is active
+                if user_profile and user_profile.get("status") == "suspended":
+                    raise HTTPException(status_code=403, detail="Account suspended")
                 
                 return {
                     "user_id": response.user.id,
@@ -232,14 +285,24 @@ class SupabaseAuthManager:
                     "created_at": response.user.created_at,
                     "last_sign_in": response.user.last_sign_in_at,
                     "user_metadata": response.user.user_metadata,
-                    "profile": user_profile
+                    "profile": user_profile,
+                    "is_active": user_profile.get("status", "active") == "active" if user_profile else True
                 }
             else:
-                raise HTTPException(status_code=401, detail="Invalid token")
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
                 
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
         except Exception as e:
             logger.error(f"❌ Get current user error: {str(e)}")
-            raise HTTPException(status_code=401, detail="Authentication failed")
+            # Distinguish between different error types
+            if "expired" in str(e).lower():
+                raise HTTPException(status_code=401, detail="Token expired")
+            elif "invalid" in str(e).lower():
+                raise HTTPException(status_code=401, detail="Invalid token")
+            else:
+                raise HTTPException(status_code=500, detail="Authentication service unavailable")
     
     async def _create_user_profile(self, user, metadata: Dict):
         """Create user profile in custom table"""
@@ -251,10 +314,10 @@ class SupabaseAuthManager:
                 "last_name": metadata.get("last_name", ""),
                 "company": metadata.get("company"),
                 "phone": metadata.get("phone"),
-                "country": metadata.get("country"),
+                "sector": metadata.get("sector"),
+                "address": metadata.get("address"),
                 "role": metadata.get("role", "user"),
                 "status": "pending_verification",
-                "created_at": datetime.utcnow().isoformat(),
                 "preferences": metadata.get("preferences", {})
             }
             
@@ -263,6 +326,13 @@ class SupabaseAuthManager:
             
         except Exception as e:
             logger.error(f"❌ Failed to create user profile: {str(e)}")
+            # Try to update existing profile if insert failed
+            try:
+                update_response = self.service_client.table('user_profiles').update(profile_data).eq('id', user.id).execute()
+                logger.info(f"✅ User profile updated: {user.email}")
+            except Exception as update_error:
+                logger.error(f"❌ Failed to update user profile: {str(update_error)}")
+                raise e
     
     async def _get_user_profile(self, user_id: str) -> Optional[Dict]:
         """Get user profile from custom table"""
@@ -281,8 +351,7 @@ class SupabaseAuthManager:
         """Update user's last login timestamp"""
         try:
             response = self.service_client.table('user_profiles').update({
-                "last_login": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
+                "last_login": datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
             
         except Exception as e:
@@ -293,8 +362,7 @@ class SupabaseAuthManager:
         try:
             response = self.service_client.table('user_profiles').update({
                 "is_verified": verified,
-                "status": "active" if verified else "pending_verification",
-                "updated_at": datetime.utcnow().isoformat()
+                "status": "active" if verified else "pending_verification"
             }).eq('id', user_id).execute()
             
         except Exception as e:

@@ -11,11 +11,16 @@ import theme from '@/theme/theme'
 import Layout from '@/components/Layout/Layout'
 import Dashboard from '@/pages/Dashboard'
 import Tenders from '@/pages/Tenders'
+import SavedTenders from '@/pages/SavedTenders'
 import TenderDetails from '@/pages/TenderDetails'
 import Analytics from '@/pages/Analytics'
 import AIReports from '@/pages/AIReports'
 import Settings from '@/pages/Settings'
+import Login from '@/pages/Login'
+import Register from '@/pages/Register'
 import NotFound from '@/pages/NotFound'
+import ProtectedRoute from '@/components/Auth/ProtectedRoute'
+import { AuthProvider } from '@/hooks/useAuth'
 
 // Create a client
 const queryClient = new QueryClient({
@@ -37,22 +42,84 @@ function App() {
         <CssBaseline />
         <QueryClientProvider client={queryClient}>
           <Router>
-            <Layout>
+            <AuthProvider>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/tenders" element={<Tenders />} />
-                <Route path="/tenders/:id" element={<TenderDetails />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/ai-reports" element={<AIReports />} />
-                <Route path="/settings" element={<Settings />} />
+                {/* Public routes - redirect to dashboard if already authenticated */}
+                <Route path="/login" element={
+                  <ProtectedRoute requireAuth={false}>
+                    <Login />
+                  </ProtectedRoute>
+                } />
+                <Route path="/register" element={
+                  <ProtectedRoute requireAuth={false}>
+                    <Register />
+                  </ProtectedRoute>
+                } />
+                
+                {/* Protected routes */}
+                <Route path="/" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Dashboard />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/dashboard" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Dashboard />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/tenders" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Tenders />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/saved-tenders" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <SavedTenders />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/tenders/:id" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <TenderDetails />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/analytics" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Analytics />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/ai-reports" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <AIReports />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Settings />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </Layout>
+            </AuthProvider>
           </Router>
           
           {/* React Query DevTools */}
-          {process.env.NODE_ENV === 'development' && <ReactQueryDevtools initialIsOpen={false} />}
+          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
           
           {/* Toast notifications */}
           <Toaster

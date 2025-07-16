@@ -127,10 +127,10 @@ async def get_tenders(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search in title, description, organization"),
-    source: Optional[str] = Query(None, description="Filter by source (UNGM, TUNIPAGES, MANUAL)"),
-    country: Optional[str] = Query(None, description="Filter by country"),
+    source: Optional[List[str]] = Query(None, description="Filter by source (UNGM, TUNIPAGES, MANUAL)"),
+    country: Optional[List[str]] = Query(None, description="Filter by country"),
     organization: Optional[str] = Query(None, description="Filter by organization"),
-    status: Optional[str] = Query("ACTIVE", description="Filter by status"),
+    status: Optional[List[str]] = Query(None, description="Filter by status"),
     min_relevance: Optional[float] = Query(None, ge=0, le=100, description="Minimum relevance score"),
     max_relevance: Optional[float] = Query(None, ge=0, le=100, description="Maximum relevance score"),
     deadline_from: Optional[date] = Query(None, description="Deadline from date (YYYY-MM-DD)"),
@@ -147,12 +147,25 @@ async def get_tenders(
         query = supabase.table('tenders').select('*', count='exact')
         
         # Apply filters
-        if status:
-            query = query.eq('status', status)
-        if source:
-            query = query.eq('source', source)
-        if country:
-            query = query.ilike('country', f'%{country}%')
+        if status and len(status) > 0:
+            if len(status) == 1:
+                query = query.eq('status', status[0])
+            else:
+                query = query.in_('status', status)
+        if source and len(source) > 0:
+            if len(source) == 1:
+                query = query.eq('source', source[0])
+            else:
+                query = query.in_('source', source)
+        if country and len(country) > 0:
+            if len(country) == 1:
+                query = query.ilike('country', f'%{country[0]}%')
+            else:
+                # For multiple countries, use OR conditions
+                country_conditions = []
+                for c in country:
+                    country_conditions.append(f'country.ilike.%{c}%')
+                query = query.or_(','.join(country_conditions))
         if organization:
             query = query.ilike('organization', f'%{organization}%')
         if min_relevance is not None:

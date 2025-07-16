@@ -38,7 +38,7 @@ const setupInterceptors = (instance: AxiosInstance) => {
   instance.interceptors.request.use(
     (config) => {
       // Add auth token if available
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('access_token')
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
       }
@@ -62,7 +62,8 @@ const setupInterceptors = (instance: AxiosInstance) => {
       // Handle common errors
       if (error.response?.status === 401) {
         // Handle unauthorized
-        localStorage.removeItem('auth_token')
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
         window.location.href = '/login'
       }
       
@@ -87,10 +88,10 @@ export const tenderApi = {
     page?: number
     per_page?: number
     search?: string
-    source?: string
-    country?: string
+    source?: string[]
+    country?: string[]
     organization?: string
-    status?: string
+    status?: string[]
     min_relevance?: number
     max_relevance?: number
     deadline_from?: string
@@ -265,6 +266,61 @@ export const aiApi = {
   // Download generated report
   downloadReport: async (filename: string): Promise<Blob> => {
     const response = await api.get(`/ai/download/${filename}`, {
+      responseType: 'blob'
+    })
+    return response.data
+  },
+}
+
+// Saved Tenders API
+export const savedTendersApi = {
+  // Get user's saved tenders
+  getSavedTenders: async (params: {
+    page?: number
+    per_page?: number
+    search?: string
+    source?: string
+    status?: string
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
+  } = {}) => {
+    const response = await api.get('/saved-tenders', { params })
+    return response.data
+  },
+
+  // Save a tender
+  saveTender: async (tender_id: string, notes?: string) => {
+    const response = await api.post('/saved-tenders', { tender_id, notes })
+    return response.data
+  },
+
+  // Unsave a tender
+  unsaveTender: async (tender_id: string) => {
+    const response = await api.delete(`/saved-tenders/${tender_id}`)
+    return response.data
+  },
+
+  // Update saved tender notes
+  updateSavedTender: async (tender_id: string, notes: string) => {
+    const response = await api.put(`/saved-tenders/${tender_id}`, { notes })
+    return response.data
+  },
+
+  // Check if tender is saved
+  checkTenderSaved: async (tender_id: string) => {
+    const response = await api.get(`/saved-tenders/check/${tender_id}`)
+    return response.data
+  },
+
+  // Get saved tenders statistics
+  getSavedTendersStats: async () => {
+    const response = await api.get('/saved-tenders/stats')
+    return response.data
+  },
+
+  // Export saved tenders to CSV
+  exportSavedTenders: async (): Promise<Blob> => {
+    const response = await api.get('/saved-tenders/export/csv', {
       responseType: 'blob'
     })
     return response.data

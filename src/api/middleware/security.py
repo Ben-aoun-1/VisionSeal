@@ -37,11 +37,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Rate limiting middleware"""
+    """Enhanced rate limiting middleware with user-specific limits"""
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Get client IP
+        # Get client IP and user ID if available
         client_ip = request.client.host if request.client else "unknown"
+        user_id = None
+        
+        # Try to extract user ID from JWT token
+        try:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                if token and len(token) > 20:  # Basic token validation
+                    from core.auth.supabase_auth import auth_manager
+                    from fastapi.security import HTTPAuthorizationCredentials
+                    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+                    user_info = await auth_manager.get_current_user(credentials)
+                    user_id = user_info.get("user_id")
+        except:
+            pass  # Continue with IP-based rate limiting if user extraction fails
+        
+        # Determine rate limit key (prefer user ID over IP)
+        rate_limit_key = f"user:{user_id}" if user_id else f"ip:{client_ip}"
         
         # Exempt frequently accessed endpoints from strict rate limiting
         status_endpoints = [
@@ -54,21 +72,25 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ]
         is_status_endpoint = any(request.url.path.startswith(endpoint) for endpoint in status_endpoints)
         
-        # Use higher limits for status endpoints (allow frequent polling)
-        if is_status_endpoint:
-            max_requests = 500  # Allow 500 requests per hour for status checks
+        # Different limits for authenticated vs anonymous users
+        if user_id:
+            # Authenticated users get higher limits
+            max_requests = 1000 if is_status_endpoint else 200
         else:
-            max_requests = 100  # Normal rate limit for other endpoints
+            # Anonymous users get lower limits
+            max_requests = 500 if is_status_endpoint else 100
         
         # Check rate limit
-        if not rate_limiter.is_allowed(client_ip, max_requests=max_requests, window_seconds=3600):
+        if not rate_limiter.is_allowed(rate_limit_key, max_requests=max_requests, window_seconds=3600):
             logger.warning(
                 "Rate limit exceeded",
                 extra={
                     "client_ip": client_ip,
+                    "user_id": user_id,
                     "path": request.url.path,
                     "method": request.method,
-                    "endpoint_type": "status" if is_status_endpoint else "normal"
+                    "endpoint_type": "status" if is_status_endpoint else "normal",
+                    "rate_limit_key": rate_limit_key
                 }
             )
             raise HTTPException(

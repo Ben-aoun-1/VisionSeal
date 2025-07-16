@@ -31,10 +31,10 @@ export enum TenderStatus {
 
 export interface TenderFilters {
   search?: string
-  source?: TenderSource
-  country?: string
+  source?: TenderSource[]
+  country?: string[]
   organization?: string
-  status?: TenderStatus
+  status?: TenderStatus[]
   min_relevance?: number
   max_relevance?: number
   deadline_from?: string
@@ -206,6 +206,67 @@ export interface SearchResults {
 export type TenderField = keyof Tender
 export type RequiredTenderFields = 'title' | 'description' | 'source' | 'country' | 'organization'
 export type OptionalTenderFields = Exclude<TenderField, RequiredTenderFields>
+
+// Saved Tenders Types
+export interface SavedTender {
+  id: string
+  user_id: string
+  tender_id: string
+  saved_at: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedTenderWithDetails extends SavedTender {
+  saved_tender_id: string
+  // Tender details
+  title: string
+  description?: string
+  source: TenderSource
+  country: string
+  organization: string
+  deadline?: string
+  publication_date?: string
+  url: string
+  reference?: string
+  status: TenderStatus
+  notice_type?: string
+  relevance_score: number
+  estimated_budget?: string
+  currency?: string
+  contact_email?: string
+  tender_extracted_at: string
+  tender_created_at: string
+  tender_updated_at: string
+}
+
+export interface SavedTenderResponse {
+  saved_tenders: SavedTenderWithDetails[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+  has_next: boolean
+  has_prev: boolean
+}
+
+export interface SavedTenderStats {
+  total_saved: number
+  saved_by_status: Record<string, number>
+  saved_by_source: Record<string, number>
+  recent_saves_count: number
+  avg_relevance_score: number
+}
+
+export interface SavedTenderCreate {
+  tender_id: string
+  notes?: string
+}
+
+export interface SavedTenderUpdate {
+  notes?: string
+}
 
 // Hook types
 export interface UseTendersOptions {

@@ -24,6 +24,7 @@ from api.middleware.security import (
     RequestLoggingMiddleware,
     get_cors_middleware
 )
+from api.middleware.session import SessionMiddleware, session_manager
 from api.routers import automation, ai, scrapers
 from api.schemas.common import HealthCheck
 
@@ -80,6 +81,7 @@ if settings.environment == "production":
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SessionMiddleware, session_manager=session_manager)
 app.add_middleware(RequestLoggingMiddleware)
 
 # Add CORS middleware (must be last) - More permissive for development
@@ -130,6 +132,10 @@ app.include_router(auth.router, prefix="/api/v1")
 # Import and include tenders router
 from api.routers import tenders
 app.include_router(tenders.router, prefix="/api/v1")
+
+# Import and include saved tenders router
+from api.routers import saved_tenders
+app.include_router(saved_tenders.router, prefix="/api/v1")
 
 # Import and include the clean automation router
 from api.routers import automation_clean
@@ -400,6 +406,23 @@ async def redirect_tenders_no_slash(request: Request):
     if query_string:
         redirect_url += f"?{query_string}"
     return RedirectResponse(url=redirect_url, status_code=307)
+
+# Add redirects for saved-tenders endpoints without trailing slash
+@app.get("/api/v1/saved-tenders")
+async def redirect_saved_tenders_get_no_slash(request: Request):
+    """Redirect /api/v1/saved-tenders to /api/v1/saved-tenders/ with query params"""
+    from fastapi.responses import RedirectResponse
+    query_string = str(request.url.query)
+    redirect_url = "/api/v1/saved-tenders/"
+    if query_string:
+        redirect_url += f"?{query_string}"
+    return RedirectResponse(url=redirect_url, status_code=307)
+
+@app.post("/api/v1/saved-tenders")
+async def redirect_saved_tenders_post_no_slash(request: Request):
+    """Redirect POST /api/v1/saved-tenders to /api/v1/saved-tenders/"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/v1/saved-tenders/", status_code=307)
 
 
 if __name__ == "__main__":
