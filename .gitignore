@@ -104,3 +104,10 @@ coverage.xml
 # Package managers
 poetry.lock
 Pipfile.lock
+
+# Data directories - AI responses, ChromaDB, extractions
+data/
+src/data/
+uploads/
+*.bin
+*.chroma
