@@ -16,7 +16,7 @@ from api.schemas.automation import (
 )
 from api.schemas.common import SuccessResponse, ErrorResponse
 from automation.task_manager import automation_manager, TaskPriority
-from core.security.auth import auth_manager
+from core.auth.supabase_auth import get_current_user, get_current_user_optional
 from core.security.validators import InputValidator
 from core.exceptions.handlers import AutomationException, ValidationException
 from core.logging.setup import get_logger
@@ -41,11 +41,14 @@ class AutomationService:
             # Validate source
             source = InputValidator.validate_source_parameter(request.source.value)
             
+            # Handle optional user (for development/testing)
+            user_id = user.get("user_id") if user else "anonymous"
+            
             logger.info(
                 "Starting automation",
                 extra={
                     "source": source,
-                    "user_id": user.get("user_id"),
+                    "user_id": user_id,
                     "max_pages": request.max_pages
                 }
             )
@@ -54,7 +57,7 @@ class AutomationService:
             config = {
                 'max_pages': request.max_pages,
                 'headless': True,  # Always run headless in production
-                'user_id': user.get("user_id")
+                'user_id': user_id
             }
             
             # Schedule scraping session using task manager
@@ -72,7 +75,7 @@ class AutomationService:
                 "source": source,
                 "status": "starting",
                 "progress": 0,
-                "user_id": user.get("user_id"),
+                "user_id": user_id,
                 "started_at": "now",
                 "task_id": task_id
             }
@@ -212,7 +215,7 @@ automation_service = AutomationService()
 async def start_automation(
     request: AutomationStartRequest,
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user_optional)
 ):
     """
     Start automation for specified source
@@ -229,7 +232,7 @@ async def start_automation(
 async def get_automation_status(
     source: AutomationSource,
     session_id: str = None,
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user_optional)
 ):
     """
     Get automation status
@@ -246,7 +249,7 @@ async def get_automation_status(
 async def stop_automation(
     source: AutomationSource,
     session_id: str = None,
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Stop automation for specified source
@@ -260,7 +263,9 @@ async def stop_automation(
 @router.get("/results/{source}", response_model=ExtractionResults)
 async def get_extraction_results(
     source: AutomationSource,
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    session_id: str = None,
+    limit: int = 50,
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Get latest extraction results
@@ -274,18 +279,117 @@ async def get_extraction_results(
             "Getting extraction results",
             extra={
                 "source": source.value,
+                "session_id": session_id,
+                "limit": limit,
                 "user_id": current_user.get("user_id")
             }
         )
         
-        # TODO: Implement actual results retrieval
-        # For now, return empty results
+        # Import here to avoid circular imports
+        from core.database.supabase_client import supabase_manager
+        from datetime import datetime, timedelta
+        
+        # Determine time range for results
+        if session_id:
+            # Get results for specific session
+            session_info = automation_manager.get_session_status(session_id)
+            if not session_info['status']:
+                return ExtractionResults(
+                    status="success",
+                    data=[],
+                    total_items=0,
+                    source=source,
+                    session_id=session_id,
+                    message=f"Session {session_id} not found"
+                )
+            
+            # Get session time range
+            session_task = session_info.get('task_info')
+            if session_task and hasattr(session_task, 'created_at'):
+                start_time = session_task.created_at
+                end_time = session_task.updated_at or datetime.now()
+            else:
+                # Fallback to recent results
+                start_time = datetime.now() - timedelta(hours=1)
+                end_time = datetime.now()
+        else:
+            # Get recent results (last 24 hours)
+            start_time = datetime.now() - timedelta(hours=24)
+            end_time = datetime.now()
+        
+        # Query Supabase for tenders from this source in the time range
+        try:
+            client = supabase_manager.get_client()
+            
+            # Build query for tenders from specific source
+            # Handle both uppercase and lowercase source values
+            source_values = [source.value.upper(), source.value.lower(), source.value.title()]
+            
+            query = client.table('tenders')\
+                .select('*')\
+                .in_('source', source_values)\
+                .gte('created_at', start_time.isoformat())\
+                .lte('created_at', end_time.isoformat())\
+                .order('created_at', desc=True)\
+                .limit(limit)
+            
+            response = query.execute()
+            tenders_data = response.data if response.data else []
+            
+            # If no results in time range, get recent tenders from this source
+            if not tenders_data and not session_id:
+                logger.info(f"No tenders found in time range, querying recent {source.value} tenders")
+                recent_query = client.table('tenders')\
+                    .select('*')\
+                    .in_('source', source_values)\
+                    .order('created_at', desc=True)\
+                    .limit(limit)
+                
+                recent_response = recent_query.execute()
+                tenders_data = recent_response.data if recent_response.data else []
+            
+        except Exception as db_error:
+            logger.warning(f"Database query failed, falling back to recent tenders: {str(db_error)}")
+            # Fallback to general recent tenders query
+            tenders_data = await supabase_manager.get_recent_tenders(limit=limit)
+            # Filter by source (case insensitive)
+            tenders_data = [
+                t for t in tenders_data 
+                if t.get('source', '').lower() == source.value.lower()
+            ]
+        
+        # Transform database records to TenderInfo format
+        tender_results = []
+        for tender_record in tenders_data:
+            try:
+                # Create TenderInfo object from database record
+                tender_info = _transform_db_record_to_tender_info(tender_record, source.value)
+                tender_results.append(tender_info)
+            except Exception as transform_error:
+                logger.warning(f"Failed to transform tender record: {str(transform_error)}")
+                continue
+        
+        # Get extraction metadata if we have a session
+        extraction_time = None
+        result_session_id = session_id
+        
+        if session_id and session_info.get('result'):
+            result = session_info['result']
+            if hasattr(result, 'created_at'):
+                extraction_time = result.created_at
+        elif not session_id and tender_results:
+            # Use the most recent tender's creation time
+            extraction_time = datetime.fromisoformat(tender_results[0].get('extracted_at', datetime.now().isoformat()))
+        
         return ExtractionResults(
             status="success",
-            data=[],
-            total_items=0,
+            data=tender_results,
+            total_items=len(tender_results),
             source=source,
-            message=f"No {source.value} results available yet"
+            session_id=result_session_id,
+            extraction_time=extraction_time,
+            message=f"Found {len(tender_results)} {source.value} results" + 
+                   (f" for session {session_id}" if session_id else " from recent extractions")
         )
         
     except Exception as e:
@@ -293,11 +397,72 @@ async def get_extraction_results(
         raise AutomationException(f"Failed to get results: {str(e)}")
 
 
+def _transform_db_record_to_tender_info(record: Dict[str, Any], source: str) -> Dict[str, Any]:
+    """Transform database record to TenderInfo format"""
+    from datetime import datetime
+    
+    try:
+        # Handle date fields safely
+        def safe_date_parse(date_str):
+            if not date_str:
+                return None
+            try:
+                if isinstance(date_str, str):
+                    return datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+                return date_str.date() if hasattr(date_str, 'date') else date_str
+            except (ValueError, AttributeError):
+                return None
+        
+        # Map database fields to TenderInfo schema
+        tender_info = {
+            "id": record.get('id', ''),
+            "title": record.get('title', ''),
+            "source": record.get('source', source).upper(),
+            "country": record.get('country'),
+            "organization": record.get('organization'),
+            "published": safe_date_parse(record.get('publication_date')),
+            "deadline": safe_date_parse(record.get('deadline')),
+            "status": record.get('status', 'active').lower(),
+            "url": record.get('url'),
+            "description": record.get('description'),
+            "budget": record.get('estimated_budget'),
+            "currency": record.get('currency'),
+            
+            # Enhanced fields
+            "details_extracted": record.get('details_extracted', False),
+            "documents_found": record.get('documents_found', 0),
+            "enhanced": record.get('enhanced', False),
+            "is_starred": False,  # Could be added later
+            "can_deep_dive": True,
+            "relevance_score": float(record.get('relevance_score', 0)) / 100.0 if record.get('relevance_score') else None,
+            
+            # Additional metadata
+            "extracted_at": record.get('extracted_at') or record.get('created_at'),
+            "reference": record.get('reference'),
+            "notice_type": record.get('notice_type'),
+            "contact_email": record.get('contact_email')
+        }
+        
+        # Remove None values for cleaner response
+        return {k: v for k, v in tender_info.items() if v is not None}
+        
+    except Exception as e:
+        logger.error(f"Error transforming tender record: {str(e)}")
+        # Return minimal valid structure
+        return {
+            "id": record.get('id', 'unknown'),
+            "title": record.get('title', 'Unknown Title'),
+            "source": source.upper(),
+            "status": "active",
+            "can_deep_dive": True
+        }
+
+
 @router.post("/deep-dive", response_model=AutomationStatusResponse)
 async def start_deep_dive(
     request: DeepDiveRequest,
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Start deep dive extraction for specific tender
@@ -333,10 +498,30 @@ async def start_deep_dive(
         raise AutomationException(f"Failed to start deep dive: {str(e)}")
 
 
+@router.get("/health")
+async def automation_health_check():
+    """Health check for automation API"""
+    try:
+        # Test automation manager availability
+        from automation.task_manager import automation_manager
+        metrics = automation_manager.get_metrics()
+        return {
+            "status": "healthy",
+            "service": "automation",
+            "task_manager": "available",
+            "active_tasks": metrics.get('active_tasks', 0),
+            "timestamp": "now"
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "service": "automation",
+            "error": str(e),
+            "timestamp": "now"
+        }
+
 @router.get("/capabilities", response_model=SuccessResponse)
-async def get_automation_capabilities(
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
-):
+async def get_automation_capabilities():
     """
     Get automation capabilities status
     
@@ -374,7 +559,7 @@ async def get_automation_capabilities(
 async def start_all_sessions(
     max_pages: int = 5,
     priority: str = "high",
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Start automation sessions for all available sources
@@ -430,9 +615,7 @@ async def start_all_sessions(
 
 
 @router.get("/sessions", response_model=List[AutomationStatusResponse])
-async def list_all_sessions(
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
-):
+async def list_all_sessions():
     """
     List all automation sessions
     """
@@ -441,20 +624,37 @@ async def list_all_sessions(
         
         responses = []
         for session in sessions:
-            # Get detailed status
-            session_info = automation_manager.get_session_status(session['task_id'])
-            
-            # Map status
-            status_mapping = {
-                'pending': 'waiting',
-                'running': 'processing',
-                'completed': 'completed',
-                'failed': 'error',
-                'cancelled': 'stopped',
-                'retrying': 'processing'
-            }
-            
-            status = status_mapping.get(session['status'], 'unknown')
+            try:
+                # Get detailed status - handle potential async issues
+                session_info = automation_manager.get_session_status(session['task_id'])
+                
+                # Ensure session_info is a dict, not a coroutine
+                if not isinstance(session_info, dict):
+                    logger.warning(f"session_info is not a dict for task {session['task_id']}: {type(session_info)}")
+                    session_info = {'status': None, 'result': None, 'task_info': None}
+                
+                # Map status
+                status_mapping = {
+                    'pending': 'waiting',
+                    'running': 'processing',
+                    'completed': 'completed',
+                    'failed': 'error',
+                    'cancelled': 'stopped',
+                    'retrying': 'processing'
+                }
+                
+                status = status_mapping.get(session.get('status', 'unknown'), 'unknown')
+            except Exception as e:
+                logger.error(f"Error processing session {session.get('task_id', 'unknown')}: {e}")
+                # Create a minimal response for failed sessions
+                responses.append(AutomationStatusResponse(
+                    status="error",
+                    session_id=session.get('task_id', 'unknown'),
+                    progress=0,
+                    current_step="Error retrieving session info",
+                    message=f"Error: {str(e)}"
+                ))
+                continue
             
             # Calculate progress
             progress = 0
@@ -466,19 +666,25 @@ async def list_all_sessions(
             # Get items found/processed
             items_found = 0
             items_processed = 0
-            if session_info['result'] and session_info['result'].result:
-                items_found = session_info['result'].result.get('tenders_found', 0)
-                items_processed = session_info['result'].result.get('tenders_processed', 0)
+            try:
+                result_obj = session_info.get('result')
+                if result_obj and hasattr(result_obj, 'result') and result_obj.result:
+                    if isinstance(result_obj.result, dict):
+                        items_found = result_obj.result.get('tenders_found', 0)
+                        items_processed = result_obj.result.get('tenders_processed', 0)
+            except (AttributeError, TypeError) as e:
+                logger.debug(f"Could not extract items count: {e}")
+                # Continue with default values
             
             responses.append(AutomationStatusResponse(
                 status=status,
-                session_id=session['task_id'],
+                session_id=session.get('task_id', 'unknown'),
                 progress=progress,
-                current_step=f"{session['source']} automation {session['status']}",
+                current_step=f"{session.get('source', 'unknown')} automation {session.get('status', 'unknown')}",
                 items_found=items_found,
                 items_processed=items_processed,
                 enhanced=True,
-                message=f"Session {session['task_id']} is {session['status']}"
+                message=f"Session {session.get('task_id', 'unknown')} is {session.get('status', 'unknown')}"
             ))
         
         return responses
@@ -490,7 +696,7 @@ async def list_all_sessions(
 
 @router.get("/metrics", response_model=SuccessResponse)
 async def get_automation_metrics(
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Get automation system metrics
@@ -518,7 +724,7 @@ async def get_automation_metrics(
 
 @router.post("/health-check", response_model=SuccessResponse)
 async def automation_health_check(
-    current_user: Dict[str, Any] = Depends(auth_manager.get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Check automation system health

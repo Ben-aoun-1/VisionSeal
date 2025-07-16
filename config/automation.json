@@ -1,0 +1,108 @@
+{
+  "scrapers": {
+    "ungm": {
+      "enabled": true,
+      "max_pages": 10,
+      "request_delay": 2,
+      "timeout": 30,
+      "retry_attempts": 3,
+      "priority_keywords": [
+        "consulting",
+        "conseil",
+        "advisory",
+        "technical assistance",
+        "capacity building",
+        "training",
+        "formation",
+        "\u00e9tude"
+      ],
+      "target_countries": [
+        "Tunisia",
+        "Morocco",
+        "Algeria",
+        "Egypt",
+        "Libya",
+        "Sudan",
+        "Nigeria",
+        "Ghana",
+        "Senegal",
+        "Mali",
+        "Burkina Faso",
+        "Niger",
+        "Guinea",
+        "Sierra Leone",
+        "Liberia",
+        "Ivory Coast",
+        "Benin",
+        "Togo",
+        "Kenya",
+        "Ethiopia",
+        "Tanzania",
+        "Uganda",
+        "Rwanda",
+        "Burundi",
+        "Somalia",
+        "Madagascar",
+        "Mauritius",
+        "Democratic Republic of Congo",
+        "Congo",
+        "Cameroon",
+        "Chad",
+        "Gabon",
+        "Central African Republic",
+        "South Africa",
+        "Botswana",
+        "Namibia",
+        "Zimbabwe",
+        "Zambia",
+        "Angola",
+        "Mozambique",
+        "Malawi",
+        "Lesotho"
+      ]
+    },
+    "tunipages": {
+      "enabled": true,
+      "max_pages": 10,
+      "request_delay": 2,
+      "timeout": 30,
+      "retry_attempts": 3,
+      "priority_keywords": [
+        "consulting",
+        "conseil",
+        "management",
+        "\u00e9tude",
+        "formation",
+        "expertise",
+        "audit",
+        "strategy"
+      ],
+      "focus_regions": [
+        "Africa",
+        "African Continent",
+        "Sub-Saharan Africa",
+        "North Africa"
+      ]
+    }
+  },
+  "task_manager": {
+    "max_workers": 4,
+    "scheduler_interval": 30,
+    "cleanup_interval": 3600,
+    "max_retry_attempts": 3,
+    "retry_delay": 300,
+    "task_timeout": 3600
+  },
+  "performance": {
+    "max_concurrent_scrapers": 2,
+    "memory_threshold_mb": 1024,
+    "cpu_threshold_percent": 80,
+    "disk_threshold_percent": 85
+  },
+  "monitoring": {
+    "enable_metrics": true,
+    "metrics_retention_days": 30,
+    "alert_failure_threshold": 0.5,
+    "health_check_interval": 60
+  }
+}

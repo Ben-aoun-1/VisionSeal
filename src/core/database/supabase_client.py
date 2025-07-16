@@ -8,6 +8,10 @@ from datetime import datetime, timedelta
 from supabase import create_client, Client
 from postgrest.exceptions import APIError
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from core.config.settings import settings
 

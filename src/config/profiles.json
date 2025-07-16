@@ -1,0 +1,51 @@
+{
+  "topaza_africa": {
+    "name": "Topaza Africa Focus",
+    "description": "Optimized for Topaza.net business across Africa",
+    "settings": {
+      "max_pages": 20,
+      "priority_countries": [
+        "Nigeria",
+        "South Africa",
+        "Kenya",
+        "Ghana",
+        "Egypt",
+        "Morocco",
+        "Tunisia",
+        "Algeria",
+        "Ethiopia",
+        "Tanzania"
+      ],
+      "priority_sectors": [
+        "management consulting",
+        "business development",
+        "training",
+        "technical studies",
+        "digital transformation"
+      ],
+      "min_relevance_score": 30.0,
+      "urgent_deadline_days": 10
+    }
+  },
+  "development": {
+    "name": "Development Profile",
+    "description": "Fast testing with limited scope",
+    "settings": {
+      "max_pages": 2,
+      "headless": false,
+      "request_delay": 1,
+      "timeout": 15
+    }
+  },
+  "production": {
+    "name": "Production Profile",
+    "description": "Full-scale production scraping",
+    "settings": {
+      "max_pages": 50,
+      "headless": true,
+      "request_delay": 3,
+      "timeout": 60,
+      "enable_monitoring": true
+    }
+  }
+}

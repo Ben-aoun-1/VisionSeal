@@ -8,6 +8,10 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
 
+# Ensure .env file is loaded
+from dotenv import load_dotenv
+load_dotenv()
+
 
 class DatabaseSettings(BaseSettings):
     """Database configuration"""
@@ -47,9 +51,35 @@ class WeaviateSettings(BaseSettings):
     """Weaviate vector database configuration"""
     url: str = Field("http://localhost:8090", env="WEAVIATE_URL")
     api_key: Optional[str] = Field(None, env="WEAVIATE_API_KEY")
+    collection_name: str = Field("TenderChunks", env="WEAVIATE_COLLECTION_NAME")
+    embedding_model: str = Field("text-embedding-3-large", env="WEAVIATE_EMBEDDING_MODEL")
+    embedding_dimension: int = Field(3072, env="WEAVIATE_EMBEDDING_DIMENSION")
     
     class Config:
         env_prefix = "WEAVIATE_"
+
+
+class AISettings(BaseSettings):
+    """AI processing configuration"""
+    chunk_size: int = Field(1500, env="AI_CHUNK_SIZE")
+    chunk_overlap: int = Field(200, env="AI_CHUNK_OVERLAP")
+    max_context_tokens: int = Field(3000, env="AI_MAX_CONTEXT_TOKENS")
+    max_response_tokens: int = Field(4000, env="AI_MAX_RESPONSE_TOKENS")
+    enable_ocr: bool = Field(False, env="AI_ENABLE_OCR")
+    
+    # RAG settings
+    similarity_top_k: int = Field(10, env="AI_SIMILARITY_TOP_K")
+    minimum_similarity_score: float = Field(0.3, env="AI_MIN_SIMILARITY_SCORE")
+    
+    # Response generation settings
+    sections_config: List[str] = Field([
+        "Introduction, Objectifs et Démarche",
+        "Méthodologie et Livrables", 
+        "Risques, Équipe et Conclusion"
+    ], env="AI_SECTIONS_CONFIG")
+    
+    class Config:
+        env_prefix = "AI_"
 
 
 class AutomationSettings(BaseSettings):
@@ -145,6 +175,7 @@ class Settings(BaseSettings):
     redis: Optional[RedisSettings] = None
     openai: Optional[OpenAISettings] = None
     weaviate: Optional[WeaviateSettings] = None
+    ai: Optional[AISettings] = None
     automation: Optional[AutomationSettings] = None
     security: Optional[SecuritySettings] = None
     api: Optional[APISettings] = None
@@ -172,14 +203,24 @@ class Settings(BaseSettings):
         
         try:
             self.openai = OpenAISettings()
-        except Exception:
-            # Fallback for demo
-            self.openai = OpenAISettings(api_key="demo-key-replace-with-real-key")
+        except Exception as e:
+            # Only use fallback if API key is truly not available
+            import os
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                self.openai = OpenAISettings(api_key=api_key)
+            else:
+                self.openai = OpenAISettings(api_key="demo-key-replace-with-real-key")
         
         try:
             self.weaviate = WeaviateSettings()
         except Exception:
             self.weaviate = WeaviateSettings()
+        
+        try:
+            self.ai = AISettings()
+        except Exception:
+            self.ai = AISettings()
         
         try:
             self.automation = AutomationSettings()
@@ -227,6 +268,11 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"Environment must be one of {allowed}")
         return v
+    
+    def get_current_timestamp(self) -> str:
+        """Get current timestamp in ISO format"""
+        from datetime import datetime
+        return datetime.now().isoformat()
     
     class Config:
         env_file = ".env"

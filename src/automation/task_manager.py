@@ -425,38 +425,65 @@ class AutomationTaskManager:
         logger.info("Automation Task Manager initialized")
     
     def _load_scrapers(self):
-        """Load available scrapers"""
+        """Load available scrapers with enhanced capabilities"""
+        self._scrapers = {}
+        
+        # Try to load production scrapers first
         try:
-            # Use Playwright scraper instead of broken Selenium scraper
-            from automation.scrapers.ungm_simple_scraper import run_ungm_simple_scraping
-            from automation.scrapers.tunipages_selenium_scraper import run_tunipages_selenium_scraping
+            from automation.scrapers.ungm_playwright_scraper import run_ungm_scraping
+            from automation.scrapers.tunipages_scraper import run_tunipages_scraping
             
             self._scrapers = {
-                'ungm': run_ungm_simple_scraping,  # Updated to use Playwright
-                'tunipages': run_tunipages_selenium_scraping
+                'ungm': run_ungm_scraping,  # UNGM Playwright scraper
+                'tunipages': run_tunipages_scraping  # TuniPages scraper with auth + documents
             }
             
-            logger.info(f"Loaded {len(self._scrapers)} scrapers (UNGM: Playwright, TuniPages: Selenium)")
+            logger.info(f"✅ Loaded {len(self._scrapers)} PRODUCTION scrapers (Playwright + Document Processing)")
             
         except ImportError as e:
-            logger.warning(f"Could not load some scrapers: {str(e)}")
-            # Fallback to any available scrapers
-            self._scrapers = {}
+            logger.warning(f"Production scrapers not available: {str(e)}, trying individual imports")
             
-            # Try to load individual scrapers
+            # Fallback to individual loading
             try:
-                from automation.scrapers.ungm_simple_scraper import run_ungm_simple_scraping
-                self._scrapers['ungm'] = run_ungm_simple_scraping
-                logger.info("Loaded UNGM Playwright scraper")
-            except ImportError:
-                logger.warning("Could not load UNGM Playwright scraper")
+                self._scrapers = {}
                 
-            try:
-                from automation.scrapers.tunipages_selenium_scraper import run_tunipages_selenium_scraping
-                self._scrapers['tunipages'] = run_tunipages_selenium_scraping
-                logger.info("Loaded TuniPages Selenium scraper")
-            except ImportError:
-                logger.warning("Could not load TuniPages Selenium scraper")
+                try:
+                    from automation.scrapers.ungm_playwright_scraper import run_ungm_scraping_sync
+                    self._scrapers['ungm'] = run_ungm_scraping_sync
+                    logger.info("✅ Loaded UNGM scraper individually (sync wrapper)")
+                except ImportError:
+                    logger.warning("❌ Could not load UNGM scraper")
+                
+                try:
+                    from automation.scrapers.tunipages_scraper import run_tunipages_scraping_sync
+                    self._scrapers['tunipages'] = run_tunipages_scraping_sync
+                    logger.info("✅ Loaded TuniPages scraper individually (sync wrapper)")
+                except ImportError:
+                    logger.warning("❌ Could not load TuniPages scraper")
+                
+                logger.info(f"⚠️ Loaded {len(self._scrapers)} scrapers individually")
+                
+            except ImportError as e2:
+                logger.error(f"Could not load any scrapers: {str(e2)}")
+                # Last resort - try to load individual scrapers
+                self._load_individual_scrapers()
+    
+    def _load_individual_scrapers(self):
+        """Load individual scrapers as last resort"""
+        # Try production scrapers individually (using sync wrappers)
+        try:
+            from automation.scrapers.ungm_playwright_scraper import run_ungm_scraping_sync
+            self._scrapers['ungm'] = run_ungm_scraping_sync
+            logger.info("✅ Loaded UNGM scraper individually (sync wrapper)")
+        except ImportError:
+            logger.warning("❌ Could not load UNGM scraper")
+        
+        try:
+            from automation.scrapers.tunipages_scraper import run_tunipages_scraping_sync
+            self._scrapers['tunipages'] = run_tunipages_scraping_sync
+            logger.info("✅ Loaded TuniPages scraper individually (sync wrapper)")
+        except ImportError:
+            logger.warning("❌ Could not load TuniPages scraper")
     
     def schedule_scraping_session(
         self,
@@ -479,6 +506,10 @@ class AutomationTaskManager:
         
         scraper_function = self._scrapers[source]
         task_name = f"Scraping {source.upper()} for Topaza.net"
+        
+        # Debug logging
+        logger.info(f"🔍 Using scraper function: {scraper_function.__name__} for source: {source}")
+        logger.info(f"🔍 Available scrapers: {list(self._scrapers.keys())}")
         
         # Get task settings from config
         automation_config = config_manager.get_automation_config()

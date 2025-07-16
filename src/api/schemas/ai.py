@@ -25,6 +25,27 @@ class DocumentType(str, Enum):
     PPTX = "pptx"
 
 
+class ReportType(str, Enum):
+    """AI report types matching frontend configuration"""
+    PROPOSAL = "proposal"
+    ANALYSIS = "analysis"
+    SUMMARY = "summary"
+
+
+class ReportTone(str, Enum):
+    """Report tone options"""
+    PROFESSIONAL = "professional"
+    TECHNICAL = "technical"
+    PERSUASIVE = "persuasive"
+
+
+class ReportLength(str, Enum):
+    """Report length options"""
+    BRIEF = "brief"          # 1-2 pages
+    DETAILED = "detailed"    # 3-5 pages
+    COMPREHENSIVE = "comprehensive"  # 6+ pages
+
+
 class ChatRequest(BaseModel):
     """Chat/Q&A request"""
     question: str = Field(..., min_length=1, max_length=1000)
@@ -215,5 +236,83 @@ class GeneratedFilesResponse(BaseResponse):
                 "status": "success",
                 "files": [],
                 "total_files": 5
+            }
+        }
+
+
+class ReportConfiguration(BaseModel):
+    """Report generation configuration matching frontend"""
+    report_type: ReportType = Field(..., description="Type of report to generate")
+    tone: ReportTone = Field(ReportTone.PROFESSIONAL, description="Writing tone for the report")
+    length: ReportLength = Field(ReportLength.DETAILED, description="Target length for the report")
+    custom_instructions: Optional[str] = Field(None, max_length=2000, description="Additional instructions or focus areas")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "report_type": "proposal",
+                "tone": "professional",
+                "length": "detailed",
+                "custom_instructions": "Focus on technical capabilities and competitive advantages"
+            }
+        }
+
+
+class AIReportRequest(BaseModel):
+    """AI report generation request matching frontend expectations exactly"""
+    tenderId: str = Field(..., description="ID of the tender to generate report for")
+    reportType: ReportType = Field(ReportType.PROPOSAL, description="Type of report")
+    tone: ReportTone = Field(ReportTone.PROFESSIONAL, description="Tone of report")
+    length: ReportLength = Field(ReportLength.DETAILED, description="Length of report")
+    customInstructions: Optional[str] = Field(None, description="Custom instructions")
+    
+    @field_validator('customInstructions')
+    @classmethod
+    def validate_custom_instructions(cls, v):
+        if v and len(v) > 2000:
+            raise ValueError("Custom instructions must be 2000 characters or less")
+        return v
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "tenderId": "abc123",
+                "reportType": "proposal",
+                "tone": "professional", 
+                "length": "detailed",
+                "customInstructions": "Emphasize our technical expertise in renewable energy projects"
+            }
+        }
+
+
+class ReportGenerationResponse(BaseModel):
+    """Report generation response with full content for frontend display"""
+    report_id: str = Field(..., description="Unique identifier for the generated report")
+    status: str = Field(..., description="Generation status (completed, failed, processing)")
+    content: str = Field(..., description="Full markdown content of the generated report")
+    download_url: Optional[str] = Field(None, description="URL to download the report as DOCX")
+    
+    # Metadata that frontend expects
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Report metadata")
+    generation_time: Optional[float] = Field(None, description="Time taken to generate in seconds")
+    word_count: Optional[int] = Field(None, description="Word count of generated report")
+    page_count: Optional[int] = Field(None, description="Estimated page count")
+    sections_count: Optional[int] = Field(None, description="Number of sections generated")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "report_id": "rpt_abc123_20241215",
+                "status": "completed",
+                "download_url": "/api/v1/ai/download/report_abc123.docx",
+                "preview_content": "Executive Summary: This proposal outlines...",
+                "metadata": {
+                    "report_type": "proposal",
+                    "tone": "professional",
+                    "length": "detailed"
+                },
+                "generation_time": 45.2,
+                "word_count": 2500,
+                "page_count": 5
             }
         }

@@ -12,6 +12,8 @@ passlib
 PyJWT
 python-multipart
 python-magic
+supabase
+email-validator
 
 # Configuration & Environment
 python-dotenv
@@ -23,37 +25,42 @@ alembic
 psycopg2-binary
 redis
 
-# AI & Vector Storage (Optional)
+# AI & Vector Storage (Enabled for RAG Integration)
 openai
-weaviate-client
+chromadb
 tiktoken
 
-# Document Processing (Optional)
-python-docx
-PyPDF2
-python-pptx
+# Document Processing (Enabled for RAG Integration)
+python-pptx  
 openpyxl
+PyMuPDF
+langchain
 
-# Data Processing (Optional)
+# Data Processing (Enabled for RAG Integration)
 pandas
 numpy
 
-# Web Scraping (Optional - for automation engines)
+# Web Scraping & Enhanced Automation
 playwright
 beautifulsoup4
 requests
+selenium
+webdriver-manager
+pdfplumber
+PyPDF2
+python-docx
 
 # Utilities
 python-dateutil
 pytz
 aiofiles
 
-# Development & Testing (Optional)
-pytest
-pytest-asyncio
+# Development & Testing (Optional - not needed in production)
+# pytest
+# pytest-asyncio
 httpx
 
-# Code Quality (Optional)
-black
-isort
-flake8
+# Code Quality (Optional - not needed in production)
+# black
+# isort
+# flake8

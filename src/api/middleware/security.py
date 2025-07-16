@@ -43,14 +43,32 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
         
+        # Exempt frequently accessed endpoints from strict rate limiting
+        status_endpoints = [
+            "/api/v1/scrapers/status", 
+            "/api/v1/health", 
+            "/health",
+            "/api/v1/tenders",  # Main tenders endpoint
+            "/api/v1/tenders/filters/options",  # Filter options
+            "/api/v1/tenders/stats/summary"  # Dashboard stats
+        ]
+        is_status_endpoint = any(request.url.path.startswith(endpoint) for endpoint in status_endpoints)
+        
+        # Use higher limits for status endpoints (allow frequent polling)
+        if is_status_endpoint:
+            max_requests = 500  # Allow 500 requests per hour for status checks
+        else:
+            max_requests = 100  # Normal rate limit for other endpoints
+        
         # Check rate limit
-        if not rate_limiter.is_allowed(client_ip, max_requests=100, window_seconds=3600):
+        if not rate_limiter.is_allowed(client_ip, max_requests=max_requests, window_seconds=3600):
             logger.warning(
                 "Rate limit exceeded",
                 extra={
                     "client_ip": client_ip,
                     "path": request.url.path,
-                    "method": request.method
+                    "method": request.method,
+                    "endpoint_type": "status" if is_status_endpoint else "normal"
                 }
             )
             raise HTTPException(

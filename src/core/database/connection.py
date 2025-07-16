@@ -116,6 +116,20 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def execute_query(self, query: str, params: dict = None):
+        """Execute a raw SQL query and return results"""
+        try:
+            with self.session_scope() as session:
+                result = session.execute(text(query), params or {})
+                # Convert result to list of dicts
+                if result.returns_rows:
+                    columns = result.keys()
+                    return [dict(zip(columns, row)) for row in result.fetchall()]
+                return result.rowcount
+        except Exception as e:
+            logger.error(f"Query execution failed: {str(e)}")
+            return []
+    
     def health_check(self) -> bool:
         """Check database connectivity"""
         try:
